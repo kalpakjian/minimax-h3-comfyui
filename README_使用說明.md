@@ -124,7 +124,69 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
 - 帶 first_frame 錨點 + `--lowvram` ≈ 每步 15–20 分，每段約 70–90 分
 - 30 秒（2×15s 會 OOM）→ 用 **3×10s**（243 幀/段）最穩
 
-## 七、常見問題
+## 七、配樂生成（ACE-Step v1.5，實戰經驗）
+
+### 為影片配連續背景音樂的正確流程
+1. **用 ACE-Step 生成一條完整音樂**（不要用 Music3，見下方踩坑）
+2. **ffmpeg 混入影片**（影片流 copy 零損失，音頻替換 + 結尾淡出）
+
+### Music3（MiniMax Music3）的教訓 ❌
+- Music3 是**歌曲模型**（天生為人聲+歌詞設計），要求它生成「純器樂」會失敗：
+  出現人聲狀雜音、中段停頓、環境聲、無旋律
+- **caption 不支援否定語法**：寫 "no drums / no vocals" 反而注入這些概念
+- **避免場景比喻**：寫 "piano in the next room" 會生成隔牆悶音（聽起來像水管聲）
+- 模型檔本身是正版（SHA256 已驗證），問題出在模型定位與提示詞方式
+
+### ACE-Step v1.5 的正確用法 ✅
+安裝位置：`C:\Users\princ\ACE-Step-1.5\`（.venv + checkpoints 已就緒）
+
+1. **寫 TOML 配置**（例如 `piano_config.toml`）：
+   ```toml
+   task_type = "text2music"
+   caption = "Gentle relaxed solo piano, soft warm tone, slow tempo 65 BPM, ..."
+   lyrics = "[Instrumental]"     # ← 官方純器樂模式，這是 Music3 做不到的
+   instrumental = true
+   duration = 40.6               # ← 直接指定時長，一次生成
+   inference_steps = 8           # turbo 模型 8 步即可
+   seed = 20260906
+   thinking = false              # ← 必加！否則 CoT 互動流程會卡住等輸入
+   use_cot_lyrics = false        # ← 必加！跳過 LM 草稿編輯
+   ```
+2. **執行**（背景執行，輸出導 log）：
+   ```
+   cd C:\Users\princ\ACE-Step-1.5
+   .venv\Scripts\python.exe cli.py -c piano_config.toml
+   ```
+   turbo 模型 8 步推理，40 秒音頻約 1~2 分鐘
+3. **輸出位置**：`ACE-Step-1.5\output\*.flac`（無損），轉 MP3：
+   `ffmpeg -y -i xxx.flac -c:a libmp3lame -b:a 320k out.mp3`
+4. **混入影片**（參考 `scripts\_mix.bat`）：
+   ```
+   ffmpeg -y -i video.mp4 -i music.mp3 -filter_complex
+   "[1:a]atrim=0:40.576,aresample=44100,afade=t=out:st=37.5:d=3[aout]"
+   -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -shortest out.mp4
+   ```
+
+### 混音/拼接的坑（重要！）
+| 坑 | 解法 |
+|---|---|
+| 輸出打不開（High 4:4:4 profile） | 來源段是 yuv444p，拼接時**必須加 `-pix_fmt yuv420p`** 或 filter 結尾 `format=yuv420p` |
+| acrossfade 後總長變短，音畫不同步 | 交叉疊化會吃掉重疊時間，需用 `atempo` 對齊（**放慢用 <1.0**，如 0.9109；方向算反了會更短） |
+| PowerShell 跑 ffmpeg 帶 `[0:v]` 的 filter | PS 會誤解析 `[ ]`，**改寫成 .bat 或用 `-filter_complex_script 檔案`** |
+| PowerShell 誤報 ffmpeg 錯誤 | ffmpeg 把進度寫到 stderr，PS 顯示為紅字錯誤；用 `cmd /c "... > log.txt 2>&1"` 捕獲後看 exit code |
+| GBK 控制台編碼 | ACE-Step CLI 結尾打印 ✅ emoji 會 UnicodeEncodeError——**音頻其實已保存**，檢查 output\ 即可 |
+| 循環加長音樂 | `asplit=N` 複製音頻 + acrossfade 循環疊化 + `atrim` 修剪到目標長度（可讓一段 10 秒音樂貫穿全片） |
+
+### 成片清單（本專案）
+| 檔案 | 說明 |
+|---|---|
+| `output\video\FINAL_40s_piano.mp4` | ⭐ 最終版：40 秒畫面 + ACE-Step 鋼琴曲貫穿 |
+| `output\video\FINAL_40s_seg1music.mp4` | 第一段音樂循環加長版 |
+| `output\video\FINAL_40s_origmusic.mp4` | 四段原音樂疊化串接版 |
+
+
+
+## 八、常見問題
 
 - **生成速度**：864x480、6 步採樣，普通模式每步約 12 分鐘；`--lowvram` 每步 15–20 分（H3TURBO LoRA 加速版）
 - **顯存不夠？** 長片（帶 first_frame）+ 243 幀建議用 `--lowvram` 啟動伺服器；也可降低解析度，先生小圖再高清化
