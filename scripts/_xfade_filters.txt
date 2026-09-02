@@ -1,0 +1,5 @@
+[0:v]scale=736:416,setsar=1,format=yuv420p[v0];
+[v0][1:v]xfade=transition=fade:duration=0.8:offset=9.325[x1];
+[x1][2:v]xfade=transition=fade:duration=0.8:offset=18.65[x2];
+[x2][3:v]xfade=transition=fade:duration=0.8:offset=27.975[vcat];
+[vcat]format=yuv420p[vout]

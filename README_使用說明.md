@@ -186,7 +186,32 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
 
 
 
-## 八、常見問題
+## 八、畫質提升（AI 超分，736→864 實戰）
+
+### 決策：超分 vs 重新生成
+- **內容已滿意、不想重新抽卡** → 超分（幾分鐘，內容 100% 不變）
+- **追求原生細節、願意重新驗收動作** → 用 864×480 重新生成（`--lowvram`，2~2.5 小時）
+- 736→864 只有 1.17 倍，ESRGAN 超分效果很好；倍率越大越建議重新生成
+
+### 超分管線（`scripts\_upscale_pipeline.bat`）
+三步全自動（911 幀約 3~4 分鐘，RTX 4090）：
+```
+1. ffmpeg 抽幀 → frames_in\*.png
+2. realesrgan-ncnn-vulkan.exe -i frames_in -o frames_out -n realesrgan-x4plus -s 4 -f png
+3. ffmpeg 合成回影片（scale=864:480）+ 保留原音頻
+```
+- 工具位置：`C:\minimax+comfyUI\scripts\realesrgan\`（ncnn-vulkan 版，GPU 加速、免 Python 依賴）
+- 超分模型：`realesrgan-x4plus`（寫實影片用；動畫風格改 `realesr-animevideov3`）
+
+### 超分管線的坑
+| 坑 | 解法 |
+|---|---|
+| `realesrgan-ncnn-vulkan` **不支援 .mp4 輸出**（invalid outputpath extension） | 必須走「抽幀 → 超分 → 合成」三步 |
+| ffmpeg 圖片序列輸出失敗（No such file or directory） | **輸出目錄必須先建立**（bat 開頭 mkdir） |
+| 911 幀 4x PNG 約 12GB | 完成後刪除 `frames_in\` `frames_out\` |
+| 拼接/後製輸出打不開 | 記得 `-pix_fmt yuv420p` |
+
+## 九、常見問題
 
 - **生成速度**：864x480、6 步採樣，普通模式每步約 12 分鐘；`--lowvram` 每步 15–20 分（H3TURBO LoRA 加速版）
 - **顯存不夠？** 長片（帶 first_frame）+ 243 幀建議用 `--lowvram` 啟動伺服器；也可降低解析度，先生小圖再高清化

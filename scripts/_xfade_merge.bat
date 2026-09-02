@@ -1,0 +1,3 @@
+@echo off
+ffmpeg -y -i C:\minimax+comfyUI\ComfyUI\output\video\MiniMax_H3_10s_00003_.mp4 -i C:\minimax+comfyUI\output\video\seg2_side_profile_00001_.mp4 -i C:\minimax+comfyUI\output\video\MiniMax_H3_10s_00005_.mp4 -i C:\minimax+comfyUI\output\video\MiniMax_H3_10s_00006_.mp4 -filter_complex_script C:\minimax+comfyUI\scripts\_xfade_filters.txt -map "[vout]" -c:v libx264 -crf 18 -preset fast -pix_fmt yuv420p C:\minimax+comfyUI\output\video\_xfade_video_nomusic.mp4
+ffmpeg -y -i C:\minimax+comfyUI\output\video\_xfade_video_nomusic.mp4 -i C:\minimax+comfyUI\output\piano_acestep_v1.mp3 -filter_complex "[1:a]atrim=0:38.1,aresample=44100,afade=t=out:st=35:d=3[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -shortest C:\minimax+comfyUI\output\video\FINAL_38s_xfade.mp4

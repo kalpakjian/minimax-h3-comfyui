@@ -50,3 +50,9 @@ python_embedded.zip
 .backup_h3_preupdate/
 backup*/
 /ComfyUI/
+
+# ===== Upscale temp (frames ~12GB, exe ~64MB) =====
+scripts/frames_in/
+scripts/frames_out/
+scripts/realesrgan/
+*.wav
