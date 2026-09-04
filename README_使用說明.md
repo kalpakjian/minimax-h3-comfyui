@@ -1,5 +1,91 @@
 ﻿# MiniMax H3 + ComfyUI 使用說明
 
+# MiniMax H3 提速更新報告（2026-09-04）
+
+對照松音 FB 貼文的三個提速項目，全部完成並實測。
+
+## 基準測試結果（同條件：864x480、73 格、4 步、seed 731159、RTX 4090 24G）
+
+| # | 配置 | torch | 耗時 | 對比基準 |
+|---|------|-------|------|---------|
+| 1 | baseline（原環境） | 2.7.1+cu126 | 1260.6 s | — |
+| 2 | + `--use-ck-attention` | 2.7.1+cu126 | 1090.5 s | **-13.5%** |
+| 3 | + TRT-VAE | 2.7.1+cu126 | 610.4 s | **-51.6%** |
+| 4 | 全套（nightly 環境） | 2.15.0.dev20260903+cu130 | **40.0 s** | **-96.8%** |
+
+> 每輪各跑 1 次。輸出影片已抽帧目視檢查，均為正常畫面（非黑屏/壞圖）。
+
+## 做了什麼
+
+1. **獨立 nightly 環境**：`python_embeded_nightly\`（複製自原 python_embeded，未動原環境）
+   - torch 2.15.0.dev20260903+cu130（CUDA 13 nightly）
+   - 解除了舊 torch 的 DynamicVRAM 降級警告（2.8+/2.12+ 才支援）
+2. **`--use-ck-attention`**：CK-Attention（comfy-kitchen 0.2.31 原本就裝好，只差啟動旗標）
+3. **TRT-VAE**：custom_nodes\ComfyUI-H3VAE_TRT + ONNX encoder/decoder
+   （models\vae\minimax_h3_vae_*.onnx），首次使用會自動編譯並快取 TensorRT engine
+
+## 日常啟動方式（改用這個）
+
+```
+C:\minimax+comfyUI\python_embeded_nightly\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
+```
+
+- TRT-VAE：workflow 裡 VAE 解碼節點改用 MiniMaxH3TRTVAE 節點（參考 scripts\bench_h3_trt.py）
+- 原環境 `python_embeded\` 完全未動，可隨時回退
+
+## 注意事項
+
+- torch nightly 每日更新，若日後 ComfyUI 更新有相容問題，可鎖回當日版本
+- PSNR 對比各輪輸出約 17-22dB：同 seed 但 attention kernel / VAE 解碼路徑不同，畫面有差異屬正常，已目視確認場景一致
+- 測速腳本：scripts\bench_h3.py（baseline/ck）、bench_h3_trt.py（TRT），結果記錄於 logs\bench_results.txt
+
+# MiniMax H3 40 秒長片重作記錄（2026-09-05）
+
+用 nightly+TRT 配置把 4 段接龍長片改用**模型原生解析度**重作，並解決先前解析度不一致的問題。
+
+## 這次做了什麼
+
+1. **解析度統一為 1344×768（原生 16:9，~1.03 MP）**
+   - 先前 seg1 用 864×480、seg2~4 用 736×416 混用，合併需縮放
+   - 查證 `MiniMaxH3ImageToVideo` 節點預設即 1344×768，是最貼近模型訓練分布的解析度
+   - 4 段 payload 的 `ResolutionSelector(node 115)` 全部設為 `megapixels=1.0`、`aspect_ratio=16:9`、`multiple=64`
+
+2. **提示詞統一**：seg1/seg2 的 "wearing nothing" → "wearing bikini"；4 段皆改為靜音（No audio）
+
+3. **非阻塞長任務執行**（解決先前 seg2「看似卡住」問題）
+   - 根因：前台跑 `_redo40.py` 會被工具 30 秒逾時殺掉，但 ComfyUI 伺服器繼續跑，導致 `redo40_results.txt` 停在 submitting
+   - 解法：用 `Start-Process -RedirectStandardOutput/-RedirectStandardError -PassThru` 背景啟動，改輪詢 `/history/{prompt_id}` 或 `logs\redo40_results.txt`，不再前台等待
+
+## 長片重作實測（1344×768、6 步、243 幀/段、RTX 4090）
+
+| 段落 | 耗時 | 產出 |
+|---|---|---|
+| seg1 | 195 s | MiniMax_H3_10s_00018_.mp4 |
+| seg2 | 210 s | MiniMax_H3_10s_00019_.mp4 |
+| seg3 | 210 s | MiniMax_H3_10s_00020_.mp4 |
+| seg4 | 210 s | MiniMax_H3_10s_00021_.mp4 |
+
+- 4 段無縫 concat 合併 + 混入鋼琴配樂 → `output\video\FINAL_40s_1344.mp4`（1344×768，~12.4 MB，40.5 s）
+- 解析度提升到原生後每段採樣 ~25s/it，4 段約 12 分鐘（對比 736×416 每段 60s，但換取完整畫質）
+
+## 執行方式（長片接龍，背景 + 非阻塞）
+
+```powershell
+# 從指定段落起跑（1 = 全部 4 段），背景執行
+$out='logs\seg_run.log'; $err='logs\seg_err.log'
+$p = Start-Process 'C:\minimax+comfyUI\python_embeded_nightly\python.exe' `
+  -ArgumentList '"C:\minimax+comfyUI\scripts\_redo40.py" 1' `
+  -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+# 輪詢 logs\redo40_results.txt 直到出現 ALL SEGMENTS DONE，或查 /history/{prompt_id}
+```
+
+## 注意
+- 解析度升到 1344×768 後每段 60s（736×416）→ ~210s（原生），換取完整畫質
+- 合併用無 BOM list 檔：PowerShell `Set-Content -Encoding utf8` 會加 BOM 讓 ffmpeg concat 報錯，改用 `[System.IO.File]::WriteAllLines` 寫 UTF8 無 BOM
+- 完成後中間產物（_noL_*.mp4、segN_last_frame.png）可刪
+---
+
+
 > 最後更新：2026-09-01
 > 本機配置：RTX 4090 (24GB VRAM) ｜ ComfyUI 0.34.0（portable 版）
 
