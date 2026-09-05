@@ -1,0 +1,1 @@
+[0:v]tpad=stop_mode=clone:stop_duration=5.0,fade=t=out:st=28:d=5[vb];[1:v]format=rgba,fade=t=in:st=27.2:d=0.6:alpha=1,fade=t=out:st=33.5:d=0.9:alpha=1,scale=w='iw*(1+0.45*min(1\,max(0\,(t-28)/5)))':h='ih*(1+0.45*min(1\,max(0\,(t-28)/5)))':eval=frame:flags=lanczos[ti];[vb][ti]overlay=(W-w)/2:(H-h)/2:format=auto[v];[0:a]apad=whole_dur=35.42,afade=t=out:st=28:d=5[a]

@@ -1,0 +1,3 @@
+file 'C:/minimax+comfyUI/output/video/Fenghuo_10s_00001_.mp4'
+file 'C:/minimax+comfyUI/output/video/Fenghuo_10s_00002_.mp4'
+file 'C:/minimax+comfyUI/output/video/Fenghuo_10s_00003_.mp4'

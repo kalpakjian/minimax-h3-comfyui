@@ -56,3 +56,16 @@ scripts/frames_in/
 scripts/frames_out/
 scripts/realesrgan/
 *.wav
+# ===== Fenghuo / nightly runtime =====
+python_embeded_nightly/
+scripts/frames_fh/
+scripts/frames_fh_out/
+scripts/frames_in2/
+scripts/frames_out2/
+scripts/fu2/
+scripts/fu2out/
+logs/
+*.mp3
+*.flac
+*.png
+!input/example.png

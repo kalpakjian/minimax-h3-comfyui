@@ -86,7 +86,7 @@ $p = Start-Process 'C:\minimax+comfyUI\python_embeded_nightly\python.exe' `
 ---
 
 
-> 最後更新：2026-09-01
+> 最後更新：2026-09-05
 > 本機配置：RTX 4090 (24GB VRAM) ｜ ComfyUI 0.34.0（portable 版）
 
 ## 一、這個資料夾是什麼？
@@ -309,4 +309,83 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
   ```
   python_embeded\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --lowvram
   ```
+
+---
+
+# 《烽火邊關》30s 史詩戰爭預告片（2026-09-05）
+
+用 **nightly + CK-Attention + TRT-VAE** 生成 3×10s 接龍，再後製標題／壓黑／音效，並 Real-ESRGAN 2× 超分。
+
+## 成片
+
+| 檔案 | 規格 | 說明 |
+|---|---|---|
+| `output\video\FINAL_40s_fenghuo.mp4` | 1344×768，約 35.5s | 1× 最終版 |
+| `output\video\FINAL_40s_fenghuo_2x.mp4` | **2688×1536**，約 35.4s | 2× 超分最終版 ⭐ |
+| `output\video\_noL_fenghuo.mp4` | 1344×768，30.4s | 三段 concat 底片（含原生環境音） |
+| `output\video\Fenghuo_10s_0000{1,2,3}_.mp4` | 各 ~10s | H3 分段原始輸出 |
+
+## 生成管線（畫面）
+
+1. **啟動 nightly 伺服器**
+   ```
+   C:\minimax+comfyUI\python_embeded_nightly\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
+   ```
+2. **三段 API payload**：`scripts\_fenghuo_seg1.json` ~ `_fenghuo_seg3.json`
+   - 1344×768、243 幀、6 步、Turbo LoRA、TRT-VAE
+   - 敘事：邊關遠景→女將→城門／箭雨→廝殺→蓄勢→騎兵衝鋒
+3. **接龍執行**：`scripts\_fenghuo30.py`（TRT 置換 + first_frame 銜接 + 背景輪詢）
+4. **銜接檢查**：`scripts\_fenghuo_diff.py`（尾幀 vs 次段首幀 RMS）
+5. **concat**：`scripts\_fh_concat_list.txt` → `_noL_fenghuo.mp4`
+
+## 後製管線（標題 + 音效）
+
+| 步驟 | 腳本 | 作用 |
+|---|---|---|
+| 金楷標題 PNG | `scripts\_fh_title_png.py` | 標楷體 `kaiu.ttf` + 亮金填色／描邊／陰影 → `_fh_title.png` |
+| 後製合成 | `scripts\_fh_post5.bat` + `_fh_post5_fc.txt` | 見下方時間軸 |
+| 2× 超分 | `scripts\_fh_up2x.bat` | 抽幀 → realesrgan-x4plus → 2688×1536 + 複製音軌 |
+
+### 最終時間軸（約 35.5s）
+
+| 時間 | 畫面 | 聲音 |
+|---|---|---|
+| 0 – 27.2s | 原片 | 全片原生環境音 |
+| 27.2 – 27.8s | 金楷「烽火邊關」**淡入** | 繼續 |
+| 28.0 – 33.0s | **5 秒壓黑** + 標題緩放大（約 1.0→1.75×） | t≈28 起交叉淡入 **seg3 後段** 環境音延續 |
+| 31.5 – 32.5s | 近黑 + 大字 | 音量約 1s 淡出 |
+| **32.5 – 結束** | 標題淡出 → 黑 | **最後約 3 秒靜音** |
+
+### 音效決策（重要）
+
+- **不使用** MiniMax Music3 / ACE-Step 獨立配樂（試聽均不滿意）
+- 正片保留 H3 原生戰場環境音
+- 片尾黑屏用 **第三段** `Fenghuo_10s_00003_.mp4` 音軌後段延續，避免空鏡無聲
+- 最後 3 秒刻意靜音收束
+
+### Music3 踩坑備註（若再試配樂）
+
+| 坑 | 說明 |
+|---|---|
+| `cfg_scale=1.0` | 等於關掉 AR 引導，曲子平淡同質；上游預設 **1.5**，`top_k` 預設 **50** |
+| caption 過長 | 形容詞堆疊會被平均化；宜 ~50 詞結構化 |
+| latent 長於 AR 自然停點 | DiT 後段 pad 零條件 → 尾段無結構嗡鳴；`seconds` 宜貼近模型自然長度 |
+| 無 instrumental / 固定時長 | 要純器樂+精準秒數優先 **ACE-Step**（`instrumental=true`, `duration=`） |
+
+## 重跑後製／2×（不重生成畫面）
+
+```bat
+REM 1x 後製（標題+壓黑+seg3 尾音）
+C:\minimax+comfyUI\scripts\_fh_post5.bat
+
+REM 2x 超分（輸入 FINAL_40s_fenghuo.mp4）
+C:\minimax+comfyUI\scripts\_fh_up2x.bat
+```
+
+### 後製／超分注意
+
+- PowerShell 對 ffmpeg `[0:v]` filter 易誤解析 → **用 .bat 或 `-filter_complex_script`**
+- concat list 必須 **UTF-8 無 BOM**
+- 超分暫存：`scripts\frames_fh\`、`scripts\frames_fh_out\`（完成後刪，可數 GB）
+- 輸出記得 `-pix_fmt yuv420p`
 
