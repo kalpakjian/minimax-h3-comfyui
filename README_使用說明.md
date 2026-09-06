@@ -300,6 +300,69 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
 ## 九、常見問題
 
 - **生成速度**：864x480、6 步採樣，普通模式每步約 12 分鐘；`--lowvram` 每步 15–20 分（H3TURBO LoRA 加速版）
+---
+
+# 附錄：可循環長片 + 純鋼琴配樂 + 2x 超分（2026-09-06 做法筆記）
+
+> 本節只記 **做法與格式**，不列任何工作流節點/提示詞細節。
+
+## A. 可循環長片（seg1→…→seg5→loop）
+
+做法：分段接龍生成後，加一段「橋」讓結尾能接回開頭形成循環。
+
+| 步驟 | 做法 | 格式 |
+|---|---|---|
+| 1. 抽尾幀 | `ffmpeg -y -v error -sseof -0.05 -i SEG.mp4 -frames:v 1 -update 1 input/segN_last_frame.png` | 尾幀 PNG 放 `input\` |
+| 2. 抽首幀 | `ffmpeg -y -ss 0 -i SEG1.mp4 -frames:v 1 -update 1 input/seg1_first_frame.png` | 首幀 PNG |
+| 3. 生成橋段 | 提交時該節點同時給 **first_frame = 上一段尾幀**、**last_frame = seg1 首幀** | 兩個 keyframe 各接一張 LoadImage |
+| 4. 合併 | concat（UTF-8 無 BOM list）順序 = seg1..seg5 | `ffmpeg -f concat -safe 0 -c copy` |
+
+- 成片總長 = 各段時長之和；此專案 5×~10.1s = **50.657s**
+- 循環「順不順」需目測：結尾畫面應接近 seg1 開場
+
+## B. 純鋼琴配樂（ACE-Step 一次生成多版本）
+
+要「純器樂 + 精準秒數」**用 ACE-Step**（Music3 是歌曲模型，見第七節）。
+
+- 配置範本用 50 秒：`duration = 50.7`、`lyrics = "[Instrumental]"`、`instrumental = true`、
+  `thinking = false`、`use_cot_lyrics = false`
+- **多版本做法**：同一 caption 換 `seed` 產生多條變體，各存一個 `.toml`（如 `_v3/_v4/_v5`）
+  ，一次 `cli.py -c <toml>` 跑一檔。
+- 輸出 = `ACE-Step-1.5\output\*.flac`（無損），轉 320k MP3：
+  `ffmpeg -y -i x.flac -c:a libmp3lame -b:a 320k out.mp3`
+- 批次跑多檔：`scripts\_gen_ace_piano50s_3more.py`（依序跑 + 自動轉 MP3）
+
+## C. 混入無聲底片（影片 copy 零損失）
+
+```
+ffmpeg -y -i video.mp4 -i music.mp3 -filter_complex
+"[1:a]atrim=0:<vid_len>,afade=t=out:st=<len-3>:d=3[a]"
+-map 0:v -map [a] -c:v copy -c:a aac -b:a 192k -t <vid_len> out.mp4
+```
+注意用 `-t <vid_len>` 鎖定影片長度，避免音樂比影片長時被 `-shortest` 截斷。
+
+## D. 2x 超分（保留音樂）
+
+`scripts\_upscale_2x_seg1_5.py`：抽幀 → `realesr-animevideov3-x2 -s 2` → 24fps 合成 +
+`-map 1:a` 帶回原音軌。1216 幀約數分鐘。完成後刪 `frames_in\ frames_out\`（可數 GB）。
+
+## E. PowerShell 誤報 error（你看到的「這個 error」）
+
+- **症狀**：跑 `git push` / `ffmpeg` 出現整段紅字 → 看起來像 error
+- **真相**：`git` 與 `ffmpeg` 把**進度訊息寫到 stderr**，PowerShell 把 stderr 當成
+  `NativeCommandError` 顯示成紅字，**但其實成功**
+- **判讀**：`git push` 顯示 "Everything up-to-date" = 其實已同步、無需推送；
+  `ffmpeg` 要看結尾 `exit code` / 目的檔案是否生成，不是看紅字
+- 避開：用 `cmd /c "... > log.txt 2>&1"` 捕獲後查 exit code
+
+## 本次相關腳本
+
+| 檔案 | 作用 |
+|---|---|
+| `scripts\_seg5_loop_submit.py` | 提交 loop bridge（first+last frame） |
+| `scripts\_gen_ace_piano50s_3more.py` | ACE-Step 批次生成多版本鋼琴 |
+| `scripts\_merge_seg1_5_loop_piano.py` | concat + 混音樂 |
+| `scripts\_upscale_2x_seg1_5.py` | 2x 超分 + 保留音軌 |
 - **顯存不夠？** 長片（帶 first_frame）+ 243 幀建議用 `--lowvram` 啟動伺服器；也可降低解析度，先生小圖再高清化
 - **負面提示詞**：H3 無獨立負面輸入框，寫在提示詞裡用「避免：...」即可
 - **提示詞範本**：參考教學文章的「烽火邊關」分段式寫法（0-4秒/4-8秒... 每段一鏡頭）
