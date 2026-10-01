@@ -1,0 +1,17 @@
+{
+  "source_video": "source_video3.mp4",
+  "replacement_image": "replacement_character4.png",
+  "prompt": "Replace only the dancing person in <Video 1> with the character in <Picture 1>. Keep the replacement character's identity, outfit, and art style from <Picture 1>. Preserve the source video's camera, framing, background, lighting, and objects. Match the person's position, scale, pose, and movement throughout the clip. Do not show the reference sheet or its background.",
+  "width": 768,
+  "height": 768,
+  "length_s": 15,
+  "seed": "random",
+  "seed_count": 1,
+  "prefix": "video/H3_SwapNightly",
+  "color_match": {
+    "enabled": true,
+    "strength": 0.85,
+    "sample_frames": 15,
+    "crf": 18
+  }
+}

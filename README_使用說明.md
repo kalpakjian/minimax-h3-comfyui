@@ -27,7 +27,7 @@
 ## 日常啟動方式（改用這個）
 
 ```
-C:\minimax+comfyUI\python_embeded_nightly\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
+D:\AI\ComfyUI\python_embeded_nightly\python.exe D:\AI\ComfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
 ```
 
 - TRT-VAE：workflow 裡 VAE 解碼節點改用 MiniMaxH3TRTVAE 節點（參考 scripts\bench_h3_trt.py）
@@ -73,8 +73,8 @@ C:\minimax+comfyUI\python_embeded_nightly\python.exe C:\minimax+comfyUI\main.py 
 ```powershell
 # 從指定段落起跑（1 = 全部 4 段），背景執行
 $out='logs\seg_run.log'; $err='logs\seg_err.log'
-$p = Start-Process 'C:\minimax+comfyUI\python_embeded_nightly\python.exe' `
-  -ArgumentList '"C:\minimax+comfyUI\scripts\_redo40.py" 1' `
+$p = Start-Process 'D:\AI\ComfyUI\python_embeded_nightly\python.exe' `
+  -ArgumentList '"D:\AI\ComfyUI\scripts\_redo40.py" 1' `
   -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
 # 輪詢 logs\redo40_results.txt 直到出現 ALL SEGMENTS DONE，或查 /history/{prompt_id}
 ```
@@ -98,7 +98,7 @@ $p = Start-Process 'C:\minimax+comfyUI\python_embeded_nightly\python.exe' `
 ## 二、資料夾結構（一看就懂版）
 
 ```
-C:\minimax+comfyUI\
+D:\AI\ComfyUI\
 ├── ComfyUI\            ← ★ 程式主體（千萬不要改名/搬動內部！）
 │   ├── models\         ← ★ 所有模型都在這裡
 │   │   ├── text_encoders\      文本編碼器（含越獄版）
@@ -121,7 +121,7 @@ C:\minimax+comfyUI\
 
 ## 三、如何啟動
 
-在 `C:\minimax+comfyUI` 目錄下執行：
+在 `D:\AI\ComfyUI` 目錄下執行：
 
 ```
 python_embeded\python.exe main.py
@@ -286,7 +286,7 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
 2. realesrgan-ncnn-vulkan.exe -i frames_in -o frames_out -n realesrgan-x4plus -s 4 -f png
 3. ffmpeg 合成回影片（scale=864:480）+ 保留原音頻
 ```
-- 工具位置：`C:\minimax+comfyUI\scripts\realesrgan\`（ncnn-vulkan 版，GPU 加速、免 Python 依賴）
+- 工具位置：`D:\AI\ComfyUI\scripts\realesrgan\`（ncnn-vulkan 版，GPU 加速、免 Python 依賴）
 - 超分模型：`realesrgan-x4plus`（寫實影片用；動畫風格改 `realesr-animevideov3`）
 
 ### 超分管線的坑
@@ -370,7 +370,7 @@ ffmpeg -y -i video.mp4 -i music.mp3 -filter_complex
 - **如何更新**：在根目錄執行 `git pull`，再執行 `python_embeded\python.exe -m pip install -r requirements.txt`
 - **啟動（跑長片建議）**：
   ```
-  python_embeded\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --lowvram
+  python_embeded\python.exe D:\AI\ComfyUI\main.py --listen 127.0.0.1 --port 8188 --lowvram
   ```
 
 ---
@@ -392,7 +392,7 @@ ffmpeg -y -i video.mp4 -i music.mp3 -filter_complex
 
 1. **啟動 nightly 伺服器**
    ```
-   C:\minimax+comfyUI\python_embeded_nightly\python.exe C:\minimax+comfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
+   D:\AI\ComfyUI\python_embeded_nightly\python.exe D:\AI\ComfyUI\main.py --listen 127.0.0.1 --port 8188 --use-ck-attention
    ```
 2. **三段 API payload**：`scripts\_fenghuo_seg1.json` ~ `_fenghuo_seg3.json`
    - 1344×768、243 幀、6 步、Turbo LoRA、TRT-VAE
@@ -439,10 +439,10 @@ ffmpeg -y -i video.mp4 -i music.mp3 -filter_complex
 
 ```bat
 REM 1x 後製（標題+壓黑+seg3 尾音）
-C:\minimax+comfyUI\scripts\_fh_post5.bat
+D:\AI\ComfyUI\scripts\_fh_post5.bat
 
 REM 2x 超分（輸入 FINAL_40s_fenghuo.mp4）
-C:\minimax+comfyUI\scripts\_fh_up2x.bat
+D:\AI\ComfyUI\scripts\_fh_up2x.bat
 ```
 
 ### 後製／超分注意
@@ -452,3 +452,54 @@ C:\minimax+comfyUI\scripts\_fh_up2x.bat
 - 超分暫存：`scripts\frames_fh\`、`scripts\frames_fh_out\`（完成後刪，可數 GB）
 - 輸出記得 `-pix_fmt yuv420p`
 
+
+### 後製／超分注意
+
+- PowerShell 對 ffmpeg `[0:v]` filter 易誤解析 → **用 .bat 或 `-filter_complex_script`**
+- concat list 必須 **UTF-8 無 BOM**
+- 超分暫存：`scripts\frames_fh\`、`scripts\frames_fh_out\`（完成後刪，可數 GB）
+- 輸出記得 `-pix_fmt yuv420p`
+
+# 角色置換 + 校色 nightly stage（2026-10-01）
+
+Nightly 系列新增 **Character Swap + 校色** 一環：用 H3 ref2va + swap LoRA + 4-step turbo + TRT VAE 把源片人物替換成目標角色，再逐 channel gain/offset 最小二乘對齊源片顏色，ffmpeg rawvideo pipe 重編（音軌保留）。
+
+## 檔案
+
+| 檔案 | 作用 |
+| --- | --- |
+| `scripts\_swap_nightly.py` | Swap + 校色 pipeline（提交 → 等出片 → 校色） |
+| `scripts\_swap_nightly_config.json` | 設定：源片 / 替換角色圖 / prompt / seed / 校色參數 |
+| `scripts\_swap_payload_base.json` | ComfyUI workflow API payload（base，每次提交前套用 config） |
+| `scripts\run_nightly.ps1` | 一鍵啟動器（新增 `-Swap` / `-SwapOnly` 參數） |
+
+## 用法
+
+```powershell
+# 4 段批次 + 置換+校色
+powershell -File scripts\run_nightly.ps1 -Swap
+
+# 只跑置換+校色（不跑 4 段批次）
+powershell -File scripts\run_nightly.ps1 -SwapOnly
+
+# 前置檢查（不實際提交）
+powershell -File scripts\run_nightly.ps1 -DryRun -Swap
+
+# 直接跑 python
+python_embeded_nightly\python.exe scripts\_swap_nightly.py            # 提交 + 校色
+python_embeded_nightly\python.exe scripts\_swap_nightly.py <mp4>      # 跳過提交，只對已有 swap 片校色
+python_embeded_nightly\python.exe scripts\_swap_nightly.py --dry      # 只印 plan
+```
+
+## 產出與 log
+
+- `output\video\H3_SwapNightly_NNNNN_.mp4` — 原始 swap 片（SaveVideo 自動遞增，從不覆寫）
+- `output\video\H3_SwapNightly_NNNNN__cc.mp4` — 校色後
+- `logs\swap_nightly_results.txt` — 全程 log（含 gain/bias 數值）
+
+## 注意
+
+- 校色失敗原因常見係輸入片冇 `streams`（ffprobe 讀唔到），會 log `color match FAILED ... 'streams'` 但唔阻擋後續段落
+- TRT VAE 失敗會自動 retry 一次（換回標準 VAE 節點）
+- 改源片／角色圖只改 `_swap_nightly_config.json`（`input\` 目錄下檔案名）
+- 校色抽幀取樣 15 幀、strength 0.85、CRF 18，可在 config `color_match` 內調
