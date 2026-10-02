@@ -224,7 +224,7 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
 - 模型檔本身是正版（SHA256 已驗證），問題出在模型定位與提示詞方式
 
 ### ACE-Step v1.5 的正確用法 ✅
-安裝位置：`C:\Users\princ\ACE-Step-1.5\`（.venv + checkpoints 已就緒）
+安裝位置：`D:\AI\ACE-Step-1.5\`（.venv + checkpoints 已就緒）
 
 1. **寫 TOML 配置**（例如 `piano_config.toml`）：
    ```toml
@@ -240,7 +240,7 @@ MiniMax H3 單次生成最長約 **15 秒**（124–362 幀，越長越不穩）
    ```
 2. **執行**（背景執行，輸出導 log）：
    ```
-   cd C:\Users\princ\ACE-Step-1.5
+   cd D:\AI\ACE-Step-1.5
    .venv\Scripts\python.exe cli.py -c piano_config.toml
    ```
    turbo 模型 8 步推理，40 秒音頻約 1~2 分鐘

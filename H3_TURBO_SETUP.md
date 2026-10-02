@@ -1,6 +1,6 @@
 # MiniMax H3 + ComfyUI Nightly（本地設置備註）
 
-> 本機環境：`C:\minimax+comfyUI`，已啟用 nightly 分支 + CK-Attention + TRT VAE
+> 本機環境：`D:\AI\ComfyUI`，已啟用 nightly 分支 + CK-Attention + TRT VAE
 
 ## 最近改動
 
