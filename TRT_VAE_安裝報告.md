@@ -152,7 +152,7 @@ MiniMaxH3TRTCompilerNode {
 |---|---|
 | cu132 還能不能用 ONNX→TRT？ | **可以**，`MiniMaxH3TRTVAELoader` 照常載入 `.engine` 出片 |
 | 舊 engine 一定要重編嗎？ | **不一定要**：TRT 11.2.1.2 / sm_89 / driver 617.42 都沒變，舊 engine 仍可反序列化；但重編只要 76.8 s，已照做 |
-| 重編後有沒有變快？ | 與舊 engine **同速**（warm median 12.3 s vs 12.3 s），**沒有退步** |
+| 重編後有沒有變快？ | 與舊 engine **同速**（warm median 12.45 s vs 12.3 s，差異在量測離散內），**沒有退步** |
 
 ### 8.2 重編步驟（照第三節 Step 2~5）
 

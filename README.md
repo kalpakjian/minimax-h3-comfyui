@@ -31,7 +31,7 @@
 | 啟動環境 | `python_embeded_nightly\`（nightly 分支，與原 `python_embeded\` 分離，可回退） |
 | torch | nightly `2.16.0.dev20261007+cu132`（CUDA 13.2，生產）／stable `2.14.1+cu132`（備援） |
 | 注意力加速 | `--use-ck-attention`（CK-Attention / comfy-kitchen） |
-| VAE 加速 | TRT（TensorRT 11.2，ONNX → engine 預編譯） |
+| VAE 加速 | TRT 11.2.1.2（ONNX → engine 預編譯；engine 2026-10-16 於 cu132 重編） |
 | 原生解析度 | 1344 × 768（16:9，~1.03 MP） |
 | 採樣步數 | 4–6 步（Turbo LoRA） |
 | 自訂節點 | `ComfyUI-MiniMax-H3-Turbo`、`ComfyUI-H3VAE_TRT`、KJNodes 等 |
