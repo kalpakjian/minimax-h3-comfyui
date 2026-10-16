@@ -18,6 +18,7 @@
 | 冷啟動參考（含模型載入） | 29.1 s（TRT） | 1 |
 
 - 舊表 `1260.6 s → 40.0 s` 是 torch 2.7.1 / cu130 世代的數字；cu132 世代同條件已到 **12–13 s warm / ~29 s cold**。
+- **生產量級**（1344×768、243 格、6 步、Turbo v4，`bench_h3_prod.py`）：TRT-VAE **199.5 s** vs fp16 VAE **200.9 s**（差 0.7%，VRAM 峰值 23.5/24.5 GB），與既有「~215 s／10 秒段落」記錄同級 ⇒ 重編後生產速度無退步；此量級 TRT 的價值是顯存／路徑穩定，不是省時間。
 - TRT 相對優勢由 **−51.6%** 收斂到個位數 %（interleaved 12.2 s vs 12.9 s）：cu132 + nightly 下**解碼已非瓶頸**；
   但 engine 4.85 GB < fp16 VAE 5.21 GB，24 GB 卡仍值得開。
 - 量測方式升級：`bench_h3_trt.py` / `bench_h3_fine.py` 現在同時記 `elapsed`（client，含排隊）與 **`exec`（server 端 execution_start→success，無排隊/輪詢誤差）**，

@@ -525,6 +525,15 @@ python_embeded_nightly\python.exe scripts\_swap_nightly.py --dry      # 只印 p
 | fp16 VAE（無 TRT） | 同上 | median **15.75 s**（12.9 / 13.8 / 15.2 / 16.3 / 19.9 / 20.2） | 6 |
 | 冷啟動參考（含模型載入） | 同上 | 29.1 s（TRT）／31.3 s（舊 engine） | 各 1 |
 
+### 生產量級（1344×768、243 格、6 步、Turbo v4）
+
+腳本 `scripts\bench_h3_prod.py <label> [seed] [trt|fp16]`，與生產 payload（`_fenghuo_seg1.json`）同構（fl2va int8 + turbo LoRA + 6 steps + video/audio VAE + CreateVideo/SaveVideo），只切換 `VAEDecode` 的 VAE 來源。
+
+| 配置 | exec | 備註 |
+|---|---|---|
+| **TRT-VAE（新 cu132 engine）** | **199.5 s** | VRAM 峰值 23.5/24.5 GB，與既有 ~215 s／段記錄同級 |
+| fp16 VAE（無 TRT） | 200.9 s | 生產量級下兩者幾乎同速（差 0.7%）：主成本是 DiT 取樣 |
+
 - TRT vs fp16：median 12.45 s vs 15.75 s（**−21%**）；interleaved 貼身對照 12.2 s vs 12.9 s（**−5%**）。
   舊世代的 −51.6% 是因為 torch 2.7.1 慢路徑下解碼占比極高；cu132 + nightly 下解碼已非瓶頸，故收益收斂。
 - 離散（19–20 s 樣本在 TRT/fp16 兩邊都出現）來自 24 GB 顯存下 DiT / CLIP / VAE 的換入換出，非 VAE 路徑本身。

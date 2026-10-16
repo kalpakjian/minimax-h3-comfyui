@@ -186,3 +186,20 @@ MiniMaxH3TRTCompilerNode {
 - **優勢已收斂**：舊世代 −51.6% 是因為 torch 2.7.1 慢路徑下解碼占比極高；cu132 + nightly 這一代**解碼已不是瓶頸**，收益回到個位數 %。
 - **仍值得開**：engine 4.85 GB < fp16 VAE 5.21 GB，24 GB 卡顯存更省；解碼路徑與 torch 版本脫鉤（本次換 cu132 即證明）。
 - **離散偏大**：19–20 s 樣本在 TRT / fp16 兩邊都出現（含一次 TRT 19.2 s，見 `/history`），來源是 24 GB 顯存下 DiT / CLIP / VAE 換入換出，非 VAE 路徑本身——比較請看 median，並用 interleaved 對照。
+
+### 8.4 生產量級跑分（1344×768、243 格、6 步、Turbo v4）
+
+腳本：`scripts\bench_h3_prod.py <label> [seed] [trt|fp16]`——與生產 payload（`scripts\_fenghuo_seg1.json`）同構：
+fl2va int8 + turbo LoRA（`low_vram=true`）+ `BasicScheduler` 6 steps + video/audio VAE + `CreateVideo`/`SaveVideo`；
+差別只在 `VAEDecode` 的 VAE 來源可切換（TRT engine / fp16 safetensors），seed 每輪換。
+
+| 配置 | torch | exec | n |
+|---|---|---|---|
+| **TRT-VAE（新 cu132 engine）** | 2.16.0.dev20261007+cu132 | **199.5 s** | 1 |
+| fp16 VAE（無 TRT） | 2.16.0.dev20261007+cu132 | 200.9 s | 1 |
+
+- 199.5 s 與既有記錄「~215 s／10 秒段落（1344×768、6 步、TRT VAE）」同級 ⇒ cu132 重編後**生產速度沒有退步**。
+- 生產量級下 **TRT 與 fp16 幾乎同速**（199.5 s vs 200.9 s，差 0.7%）：243 格／1344×768 的主成本是 DiT 取樣，解碼只佔小段。
+  此時 TRT 的價值是**顯存與路徑穩定**（engine 4.85 GB < fp16 VAE 5.21 GB、解碼不隨 torch 版本變動），不是省時間。
+- 生產量級 VRAM 峰值約 **23.5 / 24.5 GB**（`--use-ck-attention`、未加 `--lowvram`）；這也是長片建議 `--lowvram` 的原因。
+- TRT 解碼在此量級走節點內建的**時序分塊 + 256 px 空間切塊**（`minimax_trt_node.py`），243 格不必一次進 VRAM。

@@ -52,6 +52,7 @@ D:\AI\ComfyUI\python_embeded_nightly\python.exe D:\AI\ComfyUI\main.py --listen 1
 | **cu132 + CK + TRT-VAE（新 engine）** | 2.16.0.dev20261007+cu132 | **12.45 s**（median, n=4） | **−99.0%** |
 | cu132 + CK + fp16 VAE（無 TRT） | 同上 | 15.75 s（median, n=6） | −98.8% |
 | 冷啟動（含模型載入） | 同上 | 29.1 s | −97.7% |
+| **生產量級 1344×768／243 格／6 步（TRT-VAE／fp16 VAE）** | 同上 | **199.5 s / 200.9 s**（n=1） | 不同條件，不併比 |
 
 > TRT engine 已於 2026-10-16 在 cu132 重編（76.8 s）；實測舊 cu130 engine 其實仍可載入且同速（median 12.3 s）。
 > 逐輪數據、編譯記錄與方法見 [TRT_VAE_安裝報告.md](TRT_VAE_安裝報告.md) 第八節。
@@ -192,7 +193,7 @@ minimax-h3-comfyui\
 │   ├── h3_t2v_5s_workflow.json
 │   └── bathrobe_api_fixed.json
 ├── scripts\                 ← 生成／測速／後製腳本
-│   ├── bench_h3.py / bench_h3_trt.py / bench_h3_fine.py   # 測速（baseline / CK / TRT；fine = 1s 輪詢 + seed + server 端 exec）
+│   ├── bench_h3.py / bench_h3_trt.py / bench_h3_fine.py / bench_h3_prod.py   # 測速（baseline / CK / TRT；fine = 1s 輪詢 + seed + server 端 exec；prod = 1344×768/243 格/6 步生產量級）
 │   ├── run_h3_*.py                    # T2V/I2V 各種跑法
 │   ├── run_nightly.ps1               # 一鍵啟動器（-Swap / -SwapOnly / -DryRun）
 │   ├── _redo40.py                     # 40s 長片 4 段接龍（背景）
