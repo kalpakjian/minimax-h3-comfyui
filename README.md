@@ -16,7 +16,7 @@
 - **長片接龍**：多段 10s 分段生成 → 尾幀銜接 → concat 拼接（已實作 30s、40s、50s 循環片）
 - **原生音頻**：H3 一次同時產出畫面 + 音軌（視頻 VAE + 音頻 VAE）
 - **配樂生成**：MiniMax Music 3（歌曲）／ ACE-Step 1.5（純器樂、精準秒數）
-- **提速**：Turbo LoRA（4–6 步）＋ CK-Attention ＋ TRT-VAE，同條件比 baseline 快 **−96.8%**（1260s → 40s）
+- **提速**：Turbo LoRA（4–6 步）＋ CK-Attention ＋ TRT-VAE；同條件（864×480、73 格、4 步）由 baseline **1260.6 s** 降到 **12–13 s**（cu132 + nightly，warm）、冷啟動 ~29 s
 - **後製**：標題／壓黑／音效、Real-ESRGAN 2×/4× 超分
 
 ---
@@ -27,9 +27,9 @@
 |------|------|
 | GPU | NVIDIA GeForce RTX 4090 24GB |
 | 系統 | Windows / ComfyUI portable |
-| ComfyUI | 0.34.0（根目錄） |
+| ComfyUI | 0.37.0（根目錄） |
 | 啟動環境 | `python_embeded_nightly\`（nightly 分支，與原 `python_embeded\` 分離，可回退） |
-| torch | 2.15.0.dev（CUDA 13 nightly） |
+| torch | nightly `2.16.0.dev20261007+cu132`（CUDA 13.2，生產）／stable `2.14.1+cu132`（備援） |
 | 注意力加速 | `--use-ck-attention`（CK-Attention / comfy-kitchen） |
 | VAE 加速 | TRT（TensorRT 11.2，ONNX → engine 預編譯） |
 | 原生解析度 | 1344 × 768（16:9，~1.03 MP） |
@@ -43,6 +43,18 @@ D:\AI\ComfyUI\python_embeded_nightly\python.exe D:\AI\ComfyUI\main.py --listen 1
 ```
 
 啟動後瀏覽器開 **http://127.0.0.1:8188**。
+
+**最新跑分（2026-10-16，cu132）** — 864×480、73 格、4 步、`--use-ck-attention`、warm（取 server 端 `exec`＝`execution_start`→`execution_success`）：
+
+| 配置 | torch | exec | 對比 baseline |
+|------|-------|------|--------------|
+| baseline（舊世代，歷史數據） | 2.7.1+cu126 | 1260.6 s | — |
+| **cu132 + CK + TRT-VAE（新 engine）** | 2.16.0.dev20261007+cu132 | **12.45 s**（median, n=4） | **−99.0%** |
+| cu132 + CK + fp16 VAE（無 TRT） | 同上 | 15.75 s（median, n=6） | −98.8% |
+| 冷啟動（含模型載入） | 同上 | 29.1 s | −97.7% |
+
+> TRT engine 已於 2026-10-16 在 cu132 重編（76.8 s）；實測舊 cu130 engine 其實仍可載入且同速（median 12.3 s）。
+> 逐輪數據、編譯記錄與方法見 [TRT_VAE_安裝報告.md](TRT_VAE_安裝報告.md) 第八節。
 
 ---
 
@@ -180,7 +192,7 @@ minimax-h3-comfyui\
 │   ├── h3_t2v_5s_workflow.json
 │   └── bathrobe_api_fixed.json
 ├── scripts\                 ← 生成／測速／後製腳本
-│   ├── bench_h3.py / bench_h3_trt.py   # 測速（baseline / CK / TRT）
+│   ├── bench_h3.py / bench_h3_trt.py / bench_h3_fine.py   # 測速（baseline / CK / TRT；fine = 1s 輪詢 + seed + server 端 exec）
 │   ├── run_h3_*.py                    # T2V/I2V 各種跑法
 │   ├── run_nightly.ps1               # 一鍵啟動器（-Swap / -SwapOnly / -DryRun）
 │   ├── _redo40.py                     # 40s 長片 4 段接龍（背景）
@@ -210,12 +222,14 @@ minimax-h3-comfyui\
 
 - **模型不上传**：`.gitignore` 排除所有權重檔；新 clone 需自備模型到 `ComfyUI\models\`。
 - **TRT engine 平台專屬**：換 GPU 型號／架構、改 CUDA 版本都需重編 engine（`_trt_compile.py`），舊 engine 不能跨機移動；首次編譯吃大量 VRAM。
+  （2026-10-16 實測：cu130 → cu132 在 TRT 版本/GPU/driver 未變時舊 engine **仍可載入**，但重編只要 **76.8 s**，建議照編。）
 - **`.onnx.data` 不可刪**：decoder 權重 4.6GB 在其中，刪了無法重編。
-- **雙環境可回退**：nightly 升級只在 `python_embeded_nightly\`，原 `python_embeded\`（torch 2.7.1）未動。
+- **跑分要換 seed**：ComfyUI 會重用上游節點快取；`bench_h3_*.py` 每輪帶不同 seed，並以 server 端 `exec` 為準（腳本已內建輸出）。
+- **雙環境可回退**：nightly 升級只在 `python_embeded_nightly\`，原 `python_embeded\`（現為 torch 2.14.1+cu132）可回退。
 - **TRT 目前只加速解碼**（`encoder=None`）；要連編碼一起加速需另把 encoder 掛上。
 - **長片建議 `--lowvram`**：帶 first_frame 的 243 幀長片顯存吃緊時加此旗標。
 - **更新 ComfyUI**：根目錄 `git pull` → `python_embeded\python.exe -m pip install -r requirements.txt`。
 
 ---
 
-> 最後更新：2026-10-02 ｜ 本機：RTX 4090 24GB ｜ ComfyUI 0.34.0（portable）
+> 最後更新：2026-10-16 ｜ 本機：RTX 4090 24GB ｜ ComfyUI 0.37.0（portable）｜ torch 2.16.0.dev20261007+cu132（nightly）

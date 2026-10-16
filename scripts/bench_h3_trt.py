@@ -4,13 +4,21 @@
 Only difference vs bench_h3.py: video VAE for VAEDecode comes from
 MiniMaxH3TRTVAELoader (compiled .engine) instead of the fp16 safetensors VAE.
 
-Usage: python_embeded\\python.exe scripts\\bench_h3_trt.py <label>
+Usage:
+    python_embeded\\python.exe scripts\\bench_h3_trt.py <label> [seed]
+
+2nd arg = unique seed per run to defeat ComfyUI execution cache (see
+H3_TURBO_SETUP.md): without it a re-run reuses cached upstream outputs and
+measures the cache, not the workload.
 """
 import json, urllib.request, time, sys, os, datetime
 
 HOST = os.environ.get("COMFY_HOST", "http://127.0.0.1:8188")
 LABEL = sys.argv[1] if len(sys.argv) > 1 else "trt"
-RESULT_FILE = os.environ.get("COMFY_BENCH_LOG", r"C:\minimax+comfyUI\logs\bench_results.txt")
+# Optional 2nd arg: unique seed per run to defeat ComfyUI execution cache.
+# Seed value does not affect workload size (same shapes/steps), only content.
+SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 731159
+RESULT_FILE = os.environ.get("COMFY_BENCH_LOG", r"D:\AI\ComfyUI\logs\bench_results_trt.txt")
 
 PROMPT = ("A beautiful young woman wearing a white bathrobe walks slowly toward the camera, "
           "soft warm bathroom lighting, gentle steam, elegant beige tiled walls, cinematic. "
@@ -24,7 +32,7 @@ G = {
  "3":{"class_type":"CLIPLoader","inputs":{"clip_name":"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors","type":"minimax","device":"default"}},
  "4":{"class_type":"MiniMaxH3TurboLoRA","inputs":{"model":["1",0],"lora_name":"minimax_h3_turbo_v4_step600_ema.safetensors","strength":1.0,"low_vram":True}},
  "5":{"class_type":"MiniMaxH3TurboSampler","inputs":{}},
- "6":{"class_type":"RandomNoise","inputs":{"noise_seed":731159}},
+ "6":{"class_type":"RandomNoise","inputs":{"noise_seed":SEED}},
  "7":{"class_type":"BasicScheduler","inputs":{"model":["4",0],"scheduler":"simple","steps":4,"denoise":1.0}},
  "8":{"class_type":"BasicGuider","inputs":{"model":["4",0],"conditioning":["9",0]}},
  "9":{"class_type":"MiniMaxH3ImageToVideo","inputs":{"clip":["3",0],"vae":["2",0],"prompt":PROMPT,"width":864,"height":480,"length":73}},
@@ -50,9 +58,29 @@ def get(u):
     with urllib.request.urlopen(u, timeout=30) as r:
         return json.loads(r.read().decode())
 
+def server_exec_seconds(h):
+    """Server-side execution time (execution_start -> execution_success), seconds.
+
+    Immune to client poll granularity and to queue wait, unlike `elapsed`.
+    """
+    ts = {}
+    for m in h.get("status", {}).get("messages", []):
+        if m[0] in ("execution_start", "execution_success"):
+            ts[m[0]] = m[1].get("timestamp")
+    if "execution_start" in ts and "execution_success" in ts:
+        return (ts["execution_success"] - ts["execution_start"]) / 1000.0
+    return None
+
+def server_torch_version():
+    try:
+        return get(HOST + "/system_stats").get("system", {}).get("pytorch_version", "?")
+    except Exception:
+        return "?"
+
 def main():
     get(HOST+"/object_info")
-    print("Submitting benchmark [%s] ..." % LABEL)
+    torchv = server_torch_version()
+    print("Submitting benchmark [%s] torch=%s ..." % (LABEL, torchv))
     t0 = time.time()
     resp = post({"prompt": G, "client_id": "bench-%s" % LABEL})
     if "error" in resp:
@@ -63,7 +91,7 @@ def main():
     status = "unknown"; h = {}
     timeout = 7200
     while time.time()-t0 < timeout:
-        time.sleep(10)
+        time.sleep(1)
         try:
             hist = get(HOST+"/history/"+pid)
         except Exception:
@@ -81,8 +109,10 @@ def main():
         if st.get("completed") or status == "success":
             break
     elapsed = time.time()-t0
-    line = "%s label=%-14s elapsed=%8.1fs status=%s" % (
-        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), LABEL, elapsed, status)
+    exec_s = server_exec_seconds(h)
+    line = "%s label=%-14s elapsed=%8.1fs exec=%7.1fs torch=%-24s status=%s" % (
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), LABEL, elapsed,
+        exec_s if exec_s is not None else -1.0, torchv, status)
     print(line)
     print("outputs:", json.dumps(h.get("outputs", {}), ensure_ascii=False)[:500])
     with open(RESULT_FILE, "a", encoding="utf-8") as f:

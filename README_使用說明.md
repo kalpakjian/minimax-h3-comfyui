@@ -503,3 +503,47 @@ python_embeded_nightly\python.exe scripts\_swap_nightly.py --dry      # 只印 p
 - TRT VAE 失敗會自動 retry 一次（換回標準 VAE 節點）
 - 改源片／角色圖只改 `_swap_nightly_config.json`（`input\` 目錄下檔案名）
 - 校色抽幀取樣 15 幀、strength 0.85、CRF 18，可在 config `color_match` 內調
+
+# MiniMax H3 × cu132 TRT-VAE 重編 + 最新跑分（2026-10-16）
+
+環境由 `cu130 + torch 2.15.0.dev20260903` 換到 **cu132**（nightly `2.16.0.dev20261007+cu132`、stable `2.14.1+cu132`），
+舊 TRT engine 是 2026-09-04 在 cu130 下編的。本次照 `TRT_VAE_安裝報告.md` 第三節 Step 2~5 重編，並重跑同條件跑分。
+
+## 結論
+
+- **cu132 下 ONNX→TRT 照用**：`MiniMaxH3TRTVAELoader` 正常載入 `.engine` 出片，無 deserialize 失敗。
+- **舊 engine 其實仍可載入**（TRT 11.2.1.2 / sm_89 / driver 617.42 未變），且與重編後**同速**（median 12.3 s vs 12.45 s）；
+  但重編只要 **76.8 s**，已照做，engine 現為 cu132 版。
+- **速度量級**：同條件（864×480、73 格、4 步、`--use-ck-attention`）已到 **12–13 s warm / ~29 s cold**（舊世代是 1260.6 s → 40.0 s）。
+
+## 最新跑分（warm，取 server 端 `exec`＝execution_start→execution_success）
+
+| 配置 | torch | exec | n |
+|---|---|---|---|
+| TRT-VAE（新 cu132 engine） | 2.16.0.dev20261007+cu132 | median **12.45 s**（12.2 / 12.3 / 12.6 / 12.7） | 4 |
+| TRT-VAE（舊 cu130 engine） | 同上 | median **12.3 s**（12.1 / 12.3 / 12.7） | 3 |
+| fp16 VAE（無 TRT） | 同上 | median **15.75 s**（12.9 / 13.8 / 15.2 / 16.3 / 19.9 / 20.2） | 6 |
+| 冷啟動參考（含模型載入） | 同上 | 29.1 s（TRT）／31.3 s（舊 engine） | 各 1 |
+
+- TRT vs fp16：median 12.45 s vs 15.75 s（**−21%**）；interleaved 貼身對照 12.2 s vs 12.9 s（**−5%**）。
+  舊世代的 −51.6% 是因為 torch 2.7.1 慢路徑下解碼占比極高；cu132 + nightly 下解碼已非瓶頸，故收益收斂。
+- 離散（19–20 s 樣本在 TRT/fp16 兩邊都出現）來自 24 GB 顯存下 DiT / CLIP / VAE 的換入換出，非 VAE 路徑本身。
+
+## 重編步驟（實際執行）
+
+1. 先備份舊 engine → `ComfyUI\models\vae\_engine_bak_cu130_20260904\`（decoder 4.85 GB + encoder 362 MB）
+2. `POST /free`（`unload_models=true, free_memory=true`）卸載模型：VRAM 22.1 GB → 1.9 GB，避免編譯 OOM
+3. ONNX 三檔保留（`decoder.onnx` / `decoder.onnx.data` / `encoder.onnx`），`delete_onnx_after_compile=False`
+4. `$env:COMFY_HOST="http://127.0.0.1:8188"`；`python_embeded\python.exe scripts\_trt_compile.py`
+   → job `3969f2a9-…`，**76.8 s** 完成（decoder 07:52:09、encoder 07:52:37）
+5. 重跑 `bench_h3_trt.py` / `bench_h3_fine.py`（每輪換 seed）
+
+## 腳本變更（本次）
+
+| 檔案 | 變更 |
+|---|---|
+| `scripts\bench_h3_trt.py` | 新增 seed 參數（防 ComfyUI 執行快取）、1s 輪詢、**輸出 server 端 `exec`** 與 `pytorch_version`；預設 log 改為 `D:\AI\ComfyUI\logs\bench_results_trt.txt` |
+| `scripts\bench_h3_fine.py` | 同步新增 `exec` 與 `pytorch_version` 輸出 |
+| `scripts\_dl_onnx.ps1`、`scripts\_copy_env.ps1` | 清掉已廢棄的 `C:\minimax+comfyUI` 路徑，改用 `D:\AI\ComfyUI` |
+
+log：`logs\bench_results_trt.txt`、`logs\bench_results_fp16.txt`、`logs\_trt_compile_cu132.log`
